@@ -93,7 +93,7 @@ const taskBundle = () => {
 };
 
 exports.bundle = gulp.series(taskClean, taskCompile, taskBundle);
-exports.default = gulp.series(taskLint, exports.bundle);
+exports.default = gulp.series(exports.bundle);
 
 const taskSetWatch = done => {
   gulp.watch(srcFiles, exports.default);
