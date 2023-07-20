@@ -419,6 +419,29 @@ export class SecureDfu extends EventDispatcher {
     }
 
     /**
+     * bring device in bootloader dfu mode via writing 0x01 to the buttonless characteristic
+     * @param uuids 
+     * @returns Promise if device responede ok for getting into booloader mode
+     */
+    public bringDeviceIntoBootloaderDFUMode(uuids: UuidOptions = this.DEFAULT_UUIDS): Promise<boolean> {
+        var uuids = {
+            ...this.DEFAULT_UUIDS,
+            ...uuids
+        };
+        const options: any = {
+            optionalServices: [uuids.service]
+        };
+
+        options.acceptAllDevices = true;
+        
+        return this.bluetooth.requestDevice(options)
+            .then(device => {
+                return this.setDfuModeWithCheck(device, uuids)
+            });
+    }
+
+
+    /**
      * Scans for a device to update
      * @param buttonLess Scans for all devices and will automatically call `setDfuMode`
      * @param filters Alternative filters to use when scanning
@@ -517,6 +540,72 @@ export class SecureDfu extends EventDispatcher {
             });
         });
     }
+
+ /**
+     * Sets the DFU mode of a device, preparing it for update, checks if device responded ok
+     * @param device The device to switch mode
+     * @param uuids Optional alternative uuids for control, packet or button
+     * @returns Promise containing if we got correct response from device that dfu is ok -> true should be ok then 
+     */
+ public setDfuModeWithCheck(device: BluetoothDevice, uuids: UuidOptions = this.DEFAULT_UUIDS): Promise<boolean> {
+    uuids = {
+        ...this.DEFAULT_UUIDS,
+        ...uuids
+    };
+     
+    return this.gattConnect(device, uuids.service)
+    .then(characteristics => {
+        this.log(`found ${characteristics.length} characteristic(s)`);
+        const buttonChar = characteristics.find(characteristic => {
+            return (characteristic.uuid === uuids.button);
+        });
+
+        if (!buttonChar) {
+            throw new Error("Unsupported device - buttonless characteristic not found");
+        }
+
+        // Support buttonless devices
+        this.log("found buttonless characteristic");
+        if (!buttonChar.properties.notify && !buttonChar.properties.indicate) {
+            throw new Error("Buttonless characteristic does not allow notifications");
+        }
+
+        return new Promise<boolean>((resolve, _reject) => {   
+            var gotCorrectResponse = false;
+
+            function handleNotifies(event: any) {                     
+                const view = event.target.value;                
+                this.log(view);
+                if (view.getUint8(0) == 0x20 && view.getUint8(1) == 0x01 && view.getUint8(2) == 0x01) {
+                    gotCorrectResponse = true;
+                    device.gatt.disconnect();
+                    resolve(true);
+                } else {
+                    _reject("indication response on dfu mode request not ok: " + view);
+                }
+            }
+
+            function disconnect() {
+                // check if we got correct notification back 
+                this.log("got disconnect: " + gotCorrectResponse);
+                resolve(gotCorrectResponse);
+            }
+
+            buttonChar.startNotifications()
+            .then(() => {
+                this.log("enabled buttonless notifications");
+                device.addEventListener("gattserverdisconnected", disconnect.bind(this));
+                buttonChar.addEventListener("characteristicvaluechanged", handleNotifies.bind(this));
+
+                //this.sendOperation(buttonChar, OPERATIONS.BUTTON_COMMAND);                
+                const tmp = new Uint8Array(1);
+                tmp[0] = 0x01;                
+                buttonChar.writeValue(tmp); // we get notified in the callback if everything worked out correctly
+            })
+        });
+    });
+}
+
 
     /**
      * Updates a device
