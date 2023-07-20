@@ -1,3 +1,19 @@
+# Sendance fork documentation
+
+## Installation
+
+```
+git clone https://github.com/sendance/web-bluetooth-dfu.git
+npm install
+gulp
+```
+
+![Screen](screenshot1.png)
+![ErrorScreenshot](screenshot_error.png)
+
+This error happens, but still works. 
+
+
 # Web Bluetooth DFU
 
 [![Circle CI](https://img.shields.io/circleci/project/thegecko/web-bluetooth-dfu.svg)](https://circleci.com/gh/thegecko/web-bluetooth-dfu)
